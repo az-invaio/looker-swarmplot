@@ -24,25 +24,28 @@ const vis: swarmplot = {
     label: 'Something',
     
     //OPTIONS
-    options: {
+    options: {     
+        //SETUP
+        swarmType: {
+            type: 'string', 
+            label: 'Swarm Type',
+            display: "select",
+            values: [
+                {"Cloud of Points (No overlapping)" : "cloud"},
+                {'Exact Values (Allow overlapping)' : "exact"}
+            ],
+            // section: "  Setup",
+            default: "cloud",
+            order: 1
+        },        
+        
+        //POINT OPTIONS     
         groupColors: {
             type: 'array',
-            label: 'Group Colors',
-            display: 'colors'
-        },
-
-        userSetMax: {
-            type: 'number',
-            label: 'Axis Maximum',
-            display:  'number',
-            display_size: 'half'
-        },
-        
-        userSetMin:{
-            type: 'number', 
-            label: 'Axis Minimum',
-            display: 'number',
-            display_size: 'half'
+            label: 'Colors',
+            display: 'colors',
+            // section: " Format Points",
+            order: 2
         },
 
         dotRadius: {
@@ -52,8 +55,41 @@ const vis: swarmplot = {
             default: (11 - nGroups),
             min: 1, 
             max: 10, 
-            step: 1
-        }
+            step: 1,
+            order: 3,
+            // section: " Format Points"
+        },
+
+        //AXIS OPTIONS
+        userSetMin:{
+            type: 'number', 
+            label: 'Value Axis Minimum',
+            display: 'number',
+            display_size: 'half',
+            order: 4, 
+            // section: "Axis Options"
+        },
+
+        userSetMax: {
+            type: 'number',
+            label: 'Value Axis Maximum',
+            display:  'number',
+            display_size: 'half',
+            order: 5, 
+            // section: "Axis Options"
+        },
+
+        userSetValueLabel: {
+            type: 'string',
+            label: 'Value Axis Label',
+            order: 6
+        },
+
+        userSetGroupLabel: {
+            type: 'string',
+            label: 'Group Axis Label',
+            order: 7
+        }        
 
     },
 
@@ -136,15 +172,16 @@ const vis: swarmplot = {
             //FUNCTIONS
             //interaction functions
             const dotMouseOver = function(d, i){
-                
                 d3.select(this).transition()
                     .attr('r', function(){return d.target.r.baseVal.value + 2})
                     .attr('stroke-width', 2)
-                    
+                   
+                let correctKey;
+                if (i[valueKey]['rendered']===undefined) {correctKey = 'value'} else {correctKey='rendered'}
 
                 var tooltip_text = ` ${idColLabel} : ${i[idKey]['value']}` + "<br/>" + 
                 `${groupColLabel} : ${i[groupKey]['value']}` + "<br/>" + 
-                `${valueColLabel} : ${ i[valueKey]['rendered']}`
+                `${valueColLabel} : ${ i[valueKey][correctKey]}`
                 
 
                 tooltip.html(tooltip_text)
@@ -154,8 +191,23 @@ const vis: swarmplot = {
                     .style("top", (d.pageY + 10)+'px')
             }
 
-            const dotMouseMove = function(d){
+            const dotMouseMove = function(d, i){
+                
+                d3.select(this).transition()
+                    .attr('r', function(){return d.target.r.baseVal.value + 2})
+                    .attr('stroke-width', 2)
+
+                let correctKey;
+                if (i[valueKey]['rendered']===undefined) {correctKey = 'value'} else {correctKey='rendered'}
+
+                var tooltip_text = ` ${idColLabel} : ${i[idKey]['value']}` + "<br/>" + 
+                `${groupColLabel} : ${i[groupKey]['value']}` + "<br/>" + 
+                `${valueColLabel} : ${ i[valueKey][correctKey]}`
+                
+
+                tooltip.html(tooltip_text)
                 tooltip
+                    .style("opacity", 1)
                     .style("left", (d.pageX + 10)+'px')
                     .style("top", (d.pageY + 10)+'px')
             }
@@ -298,7 +350,7 @@ const vis: swarmplot = {
 
             //add axis value axis
             var verticalShift = graphicHeight - MARGINS.BOTTOM
-            var horizontalShift = MARGINS.LEFT 
+            var horizontalShift = 1.25*MARGINS.LEFT 
 
             var valScale = d3.scaleLinear()
                             .range([verticalShift, MARGINS.TOP])
@@ -308,7 +360,7 @@ const vis: swarmplot = {
                             .scale(valScale)
             
             var groupScale = d3.scaleBand()
-                            .range([MARGINS.LEFT, (graphicWidth-MARGINS.LEFT-MARGINS.RIGHT)])
+                            .range([1.25*MARGINS.LEFT, (graphicWidth-MARGINS.LEFT-MARGINS.RIGHT)])
                             .domain(groups)
                             .padding(.1);
             
@@ -354,6 +406,14 @@ const vis: swarmplot = {
                     }
                 })
             }
+
+            let groupAxisLabel, valueAxisLabel;
+            if (config.userSetValueLabel===undefined || config.userSetValueLabel===""){valueAxisLabel = valueColLabel} else {valueAxisLabel = config.userSetValueLabel}
+            if (config.userSetGroupLabel===undefined || config.userSetGroupLabel===""){groupAxisLabel = groupColLabel} else {groupAxisLabel = config.userSetGroupLabel}
+            
+            console.log(config.userSetValueLabel)
+            console.log(valueAxisLabel)
+
             //group axis  (assume x for now)
             svg.append('text')
                 .attr('x', graphicWidth/2)
@@ -362,7 +422,7 @@ const vis: swarmplot = {
                 .style('font-size', '14px')
                 .style('font-weight', 'bold')
                 .style("text-anchor", "middle")
-                .text(groupColLabel)
+                .text(groupAxisLabel)
 
             //value axis (assume y for now)
             svg.append('text')
@@ -373,10 +433,10 @@ const vis: swarmplot = {
                 .style('font-weight', 'bold')
                 .style("text-anchor", "middle")
                 .attr("transform", "rotate(-90)")
-                .text(valueColLabel)
+                .text(valueAxisLabel)
 
 
-
+            //GRAPH EACH GROUP OF DOTS
             groups.forEach(g =>{
                 function groupCheck(dot) {
                     return dot[groupKey]['value']===g
@@ -384,35 +444,82 @@ const vis: swarmplot = {
 
                 var groupDots = data.filter(groupCheck)
 
+                //GRAPH CLOUD STYLE
+                if (config.swarmType === 'cloud'){  
+                    var simulation = d3.forceSimulation(groupDots)
+                        .force('collide', d3.forceCollide().radius(config.dotRadius).strength(2.5))
+                        .force('y', d3.forceY(function(d){return valScale(d[valueKey]['value'])}).strength(3))
+                        .force('x', d3.forceX(function(d){return groupScale(d[groupKey]['value'])}))
+                        .stop();
+        
+                    for (var i = 0; i < 300; ++i) simulation.tick();
+                    
+                    svg.append('g').selectAll('dot')
+                        .data(groupDots)
+                        .enter().append('circle')
+                        .attr('class', 'dot')
+                        //circle specs
+                        .attr('r', config.dotRadius)
+                        .attr('cx', function(d){return d['x']+MARGINS.LEFT})
+                        .attr('cy', function(d){return d['y']})
+                        //circle styling
+                        .style('fill', function(d){return d['color']})
+                        .style('stroke', 'black')
+                        .style('fill-opacity', .9)
 
-                var simulation = d3.forceSimulation(groupDots)
-                    .force('collide', d3.forceCollide().radius(config.dotRadius).strength(2.5))
-                    .force('y', d3.forceY(function(d){return valScale(d[valueKey]['value'])}).strength(3))
-                    .force('x', d3.forceX(function(d){return groupScale(d[groupKey]['value'])}))
-                    .stop();
-    
-                for (var i = 0; i < 300; ++i) simulation.tick();
+                        //interactions
+                        .on('mouseover', dotMouseOver)
+                        .on('mouseleave', dotMouseOut)
+                        .on('mousemove', dotMouseMove)
+
+                }
                 
-                svg.append('g').selectAll('dot')
-                    .data(groupDots)
-                    .enter().append('circle')
-                    .attr('class', 'dot')
-                    //circle specs
-                    .attr('r', config.dotRadius)
-                    .attr('cx', function(d){return d['x']+MARGINS.LEFT})
-                    .attr('cy', function(d){return d['y']})
-                    //circle styling
-                    .style('fill', function(d){return d['color']})
-                    .style('stroke', 'black')
-                    .style('fill-opacity', .9)
+                else if (config.swarmType == 'exact') {
+                    var simulation = d3.forceSimulation(groupDots)
+                        .force('collide', d3.forceCollide().radius(config.dotRadius-2).strength(30))
+                        .force('y', d3.forceY(function(d){return valScale(d[valueKey]['value'])}).strength(3))
+                        .force('x', d3.forceX(function(d){return groupScale(d[groupKey]['value'])+MARGINS.LEFT}).strength(4))
+                        .stop();
+        
+                    for (var i = 0; i < 100; ++i) simulation.tick();
 
-                    //interactions
-                    .on('mouseover', dotMouseOver)
-                    .on('mouseleave', dotMouseOut)
-                    // .on('mousemove', dotMouseMove)
+                    // var valuesDict = {}
+                    // groupDots.forEach(d=>{
+                    //     if (Object.keys(valuesDict).includes((Math.round(d[valueKey]['value'])).toString())) {
+                    //         valuesDict[Math.round(d[valueKey]['value'])] +=1
+                    //     } else {
+                    //         valuesDict[Math.round(d[valueKey]['value'])] = 1
+                    //     }
+                    // })
+
+                    // groupDots.forEach(d=>{
+                    //     var nPoints = valuesDict[(Math.round(d[valueKey]['value'])).toString()]
+                    //     if (nPoints = 1){d['x-adjusted'] = groupScale(d[groupKey]['value'])}
+                    //     else {d['x-adjusted'] = d['x']}
+                    // })
+                    
+                    svg.append('g').selectAll('dot')
+                        .data(groupDots)
+                        .enter().append('circle')
+                        .attr('class', 'dot')
+                        //circle specs
+                        .attr('r', config.dotRadius)
+                        .attr('cx', function(d){return d['x']})
+                        .attr('cy', function(d){return valScale(d[valueKey]['value'])})
+                        //circle styling
+                        .style('fill', function(d){return d['color']})
+                        .style('stroke', '#383838')
+                        .style('opacity', .8)
+
+                        //interactions
+                        .on('mouseover', dotMouseOver)
+                        .on('mouseleave', dotMouseOut)
+                        .on('mousemove', dotMouseMove)
 
                     
-                })            
+                }
+            
+            })            
 
         };
 
